@@ -19,11 +19,12 @@ reddit_client = praw.Reddit(
 
 
 class Reddit(object):
+    """parent for subreddit threads. holds db conn for data access"""
     def __init__(self, subreddit_names):
         self.num_active_threads = 0
         self.subreddit_names = subreddit_names
         self.subreddits = {}
-        self.subreddits_doa = {}
+        self.subreddits_dao = {}
         self.index = 0
         self.conn = utils.db_conn()
         for _subreddit in subreddit_names:
@@ -33,15 +34,15 @@ class Reddit(object):
         result = self.subreddits.values()[index]
         return result
 
-    def subreddit_doa(self, subreddit_name):
-        return self.subreddits_doa.get(subreddit_name)
+    def subreddit_dao(self, subreddit_name):
+        return self.subreddits_dao.get(subreddit_name)
 
     def subreddit(self, subreddit_name):
         return self.subreddits.get(subreddit_name)
 
     def add_subreddit(self, subreddit_name):
         self.subreddits[subreddit_name] = SubReddit(subreddit_name)
-        self.subreddits_doa[subreddit_name] = SubRedditDAO(self.conn, subreddit_name)
+        self.subreddits_dao[subreddit_name] = SubRedditDAO(self.conn, subreddit_name)
 
     def start_stream(self, subreddit_name):
         self.subreddits[subreddit_name].setDaemon(True)
@@ -125,10 +126,16 @@ class SubRedditDAO(object):
 
     @property
     def sentiment(self):
-        # TODO
+        """sentiment retrieves sentiment timeseries"""
         times = self.times()
-        sql = "SELECT * FROM comments WHERE created_at BETWEEN '%s' and '%s'"
-        return times
+        cursor = self.conn.cursor()
+        resp = {}
+        for k, v in times.iteritems():
+            sql = "SELECT * FROM comments WHERE subreddit='%s' and created_at BETWEEN '%s' and '%s'" % (self.name, v, self.now)
+            cursor.execute(sql)
+            resp[k] = cursor.fetchone()
+        cursor.close()
+        return resp
 
     @property
     def volume(self):
@@ -139,8 +146,46 @@ class SubRedditDAO(object):
             sql = "SELECT Count() FROM comments WHERE subreddit='%s' and created_at BETWEEN '%s' and '%s'" % (self.name, v, self.now)
             cursor.execute(sql)
             resp[k] = cursor.fetchone()[0]
-            print resp
         cursor.close()
         return resp
+
+    def traffic_timeseries(self, duration):
+        """retrieve traffic timeseries from db"""
+        cursor = self.conn.cursor()
+        t1 = datetime.datetime.now()
+        if duration == '1d':
+            t0 = t1 - datetime.timedelta(days=1)
+            delta = datetime.timedelta(minutes=15)
+        elif duration == '15m':
+            t0 = t1 - datetime.timedelta(minutes=15)
+            delta = datetime.timedelta(seconds=15)
+        elif duration == '30m':
+            t0 = t1 - datetime.timedelta(minutes=30)
+            delta = datetime.timedelta(seconds=30)
+        elif duration == '1wk':
+            t0 = t1 - datetime.timedelta(weeks=1)
+            delta = datetime.timedelta(hours=2)
+        elif duration == '1hr':
+            t0 = t1 - datetime.timedelta(hours=1)
+            delta = datetime.timedelta(minutes=1)
+        else:
+            return {}
+        print t0, t1
+        intervals = utils.intervals(t0, t1, delta)
+        sql = ' UNION ALL '.join(["SELECT Count() " \
+                                  "FROM comments WHERE subreddit='%s'  " \
+                                  "and created_at BETWEEN '%s' and '%s'" \
+                     % (self.name, _t0, _t1) for _t0, _t1 in intervals])
+        cursor.execute(sql)
+        timeseries = cursor.fetchall()
+        flatten_timeseries = [item for sublist in timeseries for item in sublist]
+        return {
+            'timeseries': flatten_timeseries,
+            'start': t0,
+            'end': t1,
+            'intervals': len(intervals)
+        }
+
+
 
 

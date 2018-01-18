@@ -22,21 +22,21 @@ def _subreddit(subreddit):
     )
 
 
-@app.route("/r/<subreddit>/volume")
-def volume(subreddit):
-    sr = r.subreddit_doa(subreddit)
-    return json.jsonify(volume=sr.volume)
+@app.route("/r/<subreddit>/volume/<duration>")
+def volume(subreddit, duration):
+    sr = r.subreddit_dao(subreddit)
+    return json.jsonify(volume=sr.traffic_timeseries(duration))
 
 
 @app.route("/r/<subreddit>/sentiment")
 def sentiment(subreddit):
-    sr = r.subreddit(subreddit)
+    sr = r.subreddit_dao(subreddit)
     return json.jsonify(sentiment=sr.sentiment)
 
 
 @app.route("/r/<subreddit>/subscribers")
 def subscribers(subreddit):
-    sr = r.subreddit(subreddit)
+    sr = r.subreddit_dao(subreddit)
     return json.jsonify(subscribers=sr.subscribers)
 
 
@@ -55,6 +55,6 @@ def list_subreddits():
     return json.jsonify(subreddits=[sr.name for sr in r])
 
 
-
 if __name__ == "__main__":
     app.run()
+
