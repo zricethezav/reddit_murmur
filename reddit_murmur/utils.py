@@ -1,15 +1,23 @@
-import sqlite3
 import datetime
 import copy
+import psycopg2
+import settings
 
 
 def db_conn():
     """returns db conn"""
-    conn = sqlite3.connect('reddit_murmur.db')
-    conn.execute(
+
+    conn = psycopg2.connect(
+        'dbname=%s user=%s password=%s' % (settings.PG_DB,
+            settings.PG_USER, settings.PG_PW)
+    )
+    cur = conn.cursor()
+    cur.execute(
         '''CREATE TABLE IF NOT EXISTS comments
                  (subreddit text, body text, created_at text, pos real , neu real, neg real)'''
     )
+    conn.commit()
+    cur.close()
     return conn
 
 
@@ -22,10 +30,12 @@ def unix_to_iso(unix_time):
 def insert_comment(subreddit, comment, conn, analyser):
     """insert comment body and sentiment into db"""
     sentiment = analyser.polarity_scores(comment.body)
-    conn.execute("INSERT INTO comments VALUES (?, ?, ?, ?, ?, ?)",
+    cur = conn.cursor()
+    cur.execute("INSERT INTO comments VALUES (%s, %s, %s, %s, %s, %s)",
           (subreddit, comment.body, unix_to_iso(comment.created_utc), sentiment['pos'],
            sentiment['neu'], sentiment['neg']))
     conn.commit()
+    cur.close()
 
 def intervals(start, end, delta):
     """time interval strings for query, returns tuple"""

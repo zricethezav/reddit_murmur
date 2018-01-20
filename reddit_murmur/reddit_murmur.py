@@ -4,17 +4,13 @@ from threading import Thread
 import utils
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import datetime
-
-REDDIT_CLIENT = os.getenv('REDDIT_CLIENT')
-REDDIT_SECRET = os.getenv('REDDIT_SECRET')
-REDDIT_USERNAME = os.getenv('REDDIT_USERNAME')
-REDDIT_PASSWORD = os.getenv('REDDIT_PASSWORD')
+import settings
 
 reddit_client = praw.Reddit(
-        client_id=REDDIT_CLIENT,
-        client_secret=REDDIT_SECRET,
-        password=REDDIT_PASSWORD,
-        username=REDDIT_USERNAME,
+        client_id=settings.REDDIT_CLIENT,
+        client_secret=settings.REDDIT_SECRET,
+        password=settings.REDDIT_PASSWORD,
+        username=settings.REDDIT_USERNAME,
         user_agent='hype-stream by /u/pr0tocol_7')
 
 
@@ -119,7 +115,6 @@ class SubRedditDAO(object):
 
     @property
     def subscribers(self):
-        # TODO
         times = self.times()
         sql = "SELECT * FROM comments WHERE created_at BETWEEN '%s' and '%s'"
         return times
@@ -170,7 +165,6 @@ class SubRedditDAO(object):
             delta = datetime.timedelta(minutes=1)
         else:
             return {}
-        print t0, t1
         intervals = utils.intervals(t0, t1, delta)
         sql = ' UNION ALL '.join(["SELECT Count() " \
                                   "FROM comments WHERE subreddit='%s'  " \
