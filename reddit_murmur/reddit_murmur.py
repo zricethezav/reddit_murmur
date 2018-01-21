@@ -45,14 +45,11 @@ class Reddit(object):
         self.subreddits[subreddit_name].setDaemon(True)
         self.subreddits[subreddit_name].start()
 
-    def start_streams(self, keep_alive=False):
+    def start_streams(self):
         for subreddit in self.subreddits.values():
             if not subreddit.streaming:
                 subreddit.setDaemon(True)
                 subreddit.start()
-
-        while keep_alive:
-            time.sleep(1)
 
     def kill_subreddit(self, subreddit_name):
         self.subreddits[subreddit_name].kill()
@@ -61,7 +58,6 @@ class Reddit(object):
     def __del__(self):
         for sr in self.subreddits.values():
             sr.kill()
-
 
 class SubReddit(Thread):
     """SubReddit needs to monitor comment growth, subscriber growth,
@@ -130,7 +126,7 @@ class SubRedditDAO(object):
             return None
         return t0, t1, delta
 
-    def traffic_timeseries(self, duration):
+    def traffic_timeseries(self, duration='1d', t0=None, t1=None, delta=None):
         """retrieve traffic timeseries from db"""
         cursor = self.conn.cursor()
         t0, t1, delta = self.timeseries_param(duration)
@@ -146,5 +142,6 @@ class SubRedditDAO(object):
             'timeseries': flatten_timeseries,
             'start': t0,
             'end': t1,
+            'delta': delta,
             'intervals': len(intervals)
         }
