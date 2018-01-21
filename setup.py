@@ -1,10 +1,11 @@
-from setuptools import setup
+import setuptools
 
-setup(name='reddit-murmur',
-        packages=['reddit_murmur'],
+setuptools.setup(name='reddit_murmur',
+      packages=setuptools.find_packages(),
         install_requires=[
             'psycopg2',
             'praw',
-            'vaderSentiment'
+            'vaderSentiment',
+            'flask'
         ]
     )

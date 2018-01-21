@@ -1,10 +1,10 @@
-import os
 import praw
 from threading import Thread
 import utils
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import datetime
 import settings
+import time
 
 reddit_client = praw.Reddit(
         client_id=settings.REDDIT_CLIENT,
@@ -38,17 +38,21 @@ class Reddit(object):
 
     def add_subreddit(self, subreddit_name):
         self.subreddits[subreddit_name] = SubReddit(subreddit_name)
-        self.subreddits_dao[subreddit_name] = SubRedditDAO(self.conn, subreddit_name)
+        self.subreddits_dao[subreddit_name] = SubRedditDAO(self.conn,
+                subreddit_name)
 
     def start_stream(self, subreddit_name):
         self.subreddits[subreddit_name].setDaemon(True)
         self.subreddits[subreddit_name].start()
 
-    def start_streams(self):
+    def start_streams(self, keep_alive=False):
         for subreddit in self.subreddits.values():
             if not subreddit.streaming:
                 subreddit.setDaemon(True)
                 subreddit.start()
+
+        while keep_alive:
+            time.sleep(1)
 
     def kill_subreddit(self, subreddit_name):
         self.subreddits[subreddit_name].kill()
@@ -60,7 +64,8 @@ class Reddit(object):
 
 
 class SubReddit(Thread):
-    """SubReddit needs to monitor comment growth, subscriber growth, sentiment score at different durations"""
+    """SubReddit needs to monitor comment growth, subscriber growth,
+    sentiment score at different durations"""
     def __init__(self, name):
         Thread.__init__(self)
         self.name = name
@@ -71,6 +76,11 @@ class SubReddit(Thread):
         self.analyser = SentimentIntensityAnalyzer()
         self.created_at = datetime.datetime.now()
         self.create_at_iso = utils.unix_to_iso(self.created_at.strftime('%s'))
+
+    @property
+    def subscribers(self):
+        """init new subreddit client get subscribers"""
+        return reddit_client.subreddit(self.name).subscribers
 
     def run(self):
         self.conn = utils.db_conn()
@@ -95,58 +105,11 @@ class SubRedditDAO(object):
         self.conn = conn
         self.name = name
 
-    @staticmethod
-    def times():
-        now = datetime.datetime.now()
-        min_30 = utils.unix_to_iso((now - datetime.timedelta(minutes=30)).strftime('%s'))
-        hour = utils.unix_to_iso((now - datetime.timedelta(hours=1)).strftime('%s'))
-        day = utils.unix_to_iso((now - datetime.timedelta(days=1)).strftime('%s'))
-        week = utils.unix_to_iso((now - datetime.timedelta(weeks=1)).strftime('%s'))
-        return {
-            '30m': min_30,
-            '1h': hour,
-            '1d': day,
-            '1wk': week
-        }
-
     @property
     def now(self):
         return utils.unix_to_iso(datetime.datetime.now().strftime('%s'))
 
-    @property
-    def subscribers(self):
-        times = self.times()
-        sql = "SELECT * FROM comments WHERE created_at BETWEEN '%s' and '%s'"
-        return times
-
-    @property
-    def sentiment(self):
-        """sentiment retrieves sentiment timeseries"""
-        times = self.times()
-        cursor = self.conn.cursor()
-        resp = {}
-        for k, v in times.iteritems():
-            sql = "SELECT * FROM comments WHERE subreddit='%s' and created_at BETWEEN '%s' and '%s'" % (self.name, v, self.now)
-            cursor.execute(sql)
-            resp[k] = cursor.fetchone()
-        cursor.close()
-        return resp
-
-    @property
-    def volume(self):
-        times = self.times()
-        cursor = self.conn.cursor()
-        resp = {}
-        for k, v in times.iteritems():
-            sql = "SELECT Count() FROM comments WHERE subreddit='%s' and created_at BETWEEN '%s' and '%s'" % (self.name, v, self.now)
-            cursor.execute(sql)
-            resp[k] = cursor.fetchone()[0]
-        cursor.close()
-        return resp
-
-    def traffic_timeseries(self, duration):
-        """retrieve traffic timeseries from db"""
-        cursor = self.conn.cursor()
+    def timeseries_param(self, duration):
         t1 = datetime.datetime.now()
         if duration == '1d':
             t0 = t1 - datetime.timedelta(days=1)
@@ -164,9 +127,15 @@ class SubRedditDAO(object):
             t0 = t1 - datetime.timedelta(hours=1)
             delta = datetime.timedelta(minutes=1)
         else:
-            return {}
+            return None
+        return t0, t1, delta
+
+    def traffic_timeseries(self, duration):
+        """retrieve traffic timeseries from db"""
+        cursor = self.conn.cursor()
+        t0, t1, delta = self.timeseries_param(duration)
         intervals = utils.intervals(t0, t1, delta)
-        sql = ' UNION ALL '.join(["SELECT Count() " \
+        sql = ' UNION ALL '.join(["SELECT Count(*) " \
                                   "FROM comments WHERE subreddit='%s'  " \
                                   "and created_at BETWEEN '%s' and '%s'" \
                      % (self.name, _t0, _t1) for _t0, _t1 in intervals])
@@ -179,7 +148,3 @@ class SubRedditDAO(object):
             'end': t1,
             'intervals': len(intervals)
         }
-
-
-
-

@@ -37,6 +37,7 @@ def insert_comment(subreddit, comment, conn, analyser):
     conn.commit()
     cur.close()
 
+
 def intervals(start, end, delta):
     """time interval strings for query, returns tuple"""
     intervals = []
