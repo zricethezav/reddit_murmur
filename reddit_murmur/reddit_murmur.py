@@ -145,3 +145,23 @@ class SubRedditDAO(object):
             'delta': delta,
             'intervals': len(intervals)
         }
+
+    def sentiment_timeseries(self, duration='1d', t0=None, t1=None, delta=None):
+        """retrieve sentiment timeseries from db"""
+        cursor = self.conn.cursor()
+        t0, t1, delta = self.timeseries_param(duration)
+        intervals = utils.intervals(t0, t1, delta)
+        sql = ' UNION ALL '.join(["SELECT AVG(ALL pos), AVG(ALL neu), AVG(ALL neg) " \
+                                  "FROM comments WHERE subreddit='%s'  " \
+                                  "and created_at BETWEEN '%s' and '%s'" \
+                     % (self.name, _t0, _t1) for _t0, _t1 in intervals])
+        cursor.execute(sql)
+        timeseries = cursor.fetchall()
+        return {
+            'timeseries': timeseries,
+            'start': t0,
+            'end': t1,
+            'delta': delta,
+            'intervals': len(intervals)
+        }
+
